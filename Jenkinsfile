@@ -46,6 +46,7 @@ node {
 
             String prArgs = ""
             if (isPullRequest()) {
+                echo "Analysing SQ in PR mode"
                 prArgs = "-Dsonar.pullrequest.base=master" +
                          "-Dsonar.pullrequest.branch=${env.BRANCH_NAME}" +
                          "-Dsonar.pullrequest.key=${env.CHANGE_ID}" +
