@@ -58,7 +58,6 @@ node {
                 mvn "${env.SONAR_MAVEN_GOAL} " +
                         "-Dsonar.host.url=${env.SONAR_HOST_URL} " +
                         "-Dsonar.login=${env.SONAR_AUTH_TOKEN} " +
-                        "-Dsonar.organization=schnatterer -Dsonar.branch.name=develop -Dsonar.branch.target=master" +
                         "${prArgs}"
             }
         }
