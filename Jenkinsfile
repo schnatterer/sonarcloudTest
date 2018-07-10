@@ -11,7 +11,6 @@ node {
 
     cesFqdn = findHostName()
     cesUrl = "https://${cesFqdn}"
-    String credentialsId = 'scmCredentials'
 
     Maven mvn = new MavenWrapper(this)
 
@@ -44,11 +43,21 @@ node {
         )
 
         stage('SonarQube Analysis') {
-            withCredentials([usernamePassword(credentialsId: credentialsId,
-                    passwordVariable: 'PASSWORD', usernameVariable: 'USERNAME')]) {
-                //noinspection GroovyAssignabilityCheck
-                mvn "org.codehaus.mojo:sonar-maven-plugin:3.2:sonar -Dsonar.host.url=${cesUrl}/sonar " +
-                        "-Dsonar.login=${USERNAME} -Dsonar.password=${PASSWORD} -Dsonar.exclusions=target/**"
+
+            String prArgs = ""
+            if (isPullRequest()) {
+                prArgs = "-Dsonar.pullrequest.base=master" +
+                         "-Dsonar.pullrequest.branch=${env.BRANCH_NAME}" +
+                         "-Dsonar.pullrequest.key=${env.CHANGE_ID}" +
+                         "-Dsonar.pullrequest.provider=GitHub" +
+                         "-Dsonar.pullrequest.github.repository=new Git(this).gitHubRepositoryName"
+            }
+
+            withSonarQubeEnv('sonarcloud.io') {
+                mvn "${env.SONAR_MAVEN_GOAL} " +
+                        "-Dsonar.host.url=${env.SONAR_HOST_URL} " +
+                        "-Dsonar.login=${env.SONAR_AUTH_TOKEN} " +
+                        "${prArgs}"
             }
         }
     }
