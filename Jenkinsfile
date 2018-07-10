@@ -51,12 +51,6 @@ node {
                         "-Dsonar.login=${USERNAME} -Dsonar.password=${PASSWORD} -Dsonar.exclusions=target/**"
             }
         }
-
-        stage('Deploy Artifacts') {
-            mvn.setDeploymentRepository(cesFqdn, "${cesUrl}/nexus", credentialsId)
-
-            mvn.deployToNexusRepository('-Dmaven.javadoc.failOnError=false')
-        }
     }
 
     // Archive Unit and integration test results, if any
