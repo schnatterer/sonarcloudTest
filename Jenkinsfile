@@ -51,13 +51,14 @@ node {
                          "-Dsonar.pullrequest.branch=${env.BRANCH_NAME}" +
                          "-Dsonar.pullrequest.key=${env.CHANGE_ID}" +
                          "-Dsonar.pullrequest.provider=GitHub" +
-                         "-Dsonar.pullrequest.github.repository=new Git(this).gitHubRepositoryName"
+                         "-Dsonar.pullrequest.github.repository=${new Git(this).gitHubRepositoryName}"
             }
 
             withSonarQubeEnv('sonarcloud.io') {
                 mvn "${env.SONAR_MAVEN_GOAL} " +
                         "-Dsonar.host.url=${env.SONAR_HOST_URL} " +
                         "-Dsonar.login=${env.SONAR_AUTH_TOKEN} " +
+                        "-Dsonar.organization=schnatterer -Dsonar.branch.name=develop -Dsonar.branch.target=master" +
                         "${prArgs}"
             }
         }
