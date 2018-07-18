@@ -1,5 +1,5 @@
 #!groovy
-@Library('github.com/cloudogu/ces-build-lib@caa9632')
+@Library('github.com/cloudogu/ces-build-lib@6730a61')
 import com.cloudogu.ces.cesbuildlib.*
 
 properties([
@@ -43,23 +43,13 @@ node {
         )
 
         stage('SonarQube Analysis') {
+          def sonarQube = new SonarCloud(this, 'sonarQubeServerSetupInJenkins', 'schnatterer-github')
 
-            String prArgs = ""
-            if (isPullRequest()) {
-                echo "Analysing SQ in PR mode"
-                prArgs = "-Dsonar.pullrequest.base=${env.CHANGE_TARGET} " +
-                         "-Dsonar.pullrequest.branch=${env.CHANGE_BRANCH} " +
-                         "-Dsonar.pullrequest.key=${env.CHANGE_ID} " +
-                         "-Dsonar.pullrequest.provider=GitHub " +
-                         "-Dsonar.pullrequest.github.repository=${new Git(this).gitHubRepositoryName}"
-            }
+          sonarQube.analyzeWith(mvn)
 
-            withSonarQubeEnv('sonarcloud.io') {
-                mvn "${env.SONAR_MAVEN_GOAL} " +
-                        "-Dsonar.host.url=${env.SONAR_HOST_URL} " +
-                        "-Dsonar.login=${env.SONAR_AUTH_TOKEN} " +
-                        "${prArgs}"
-            }
+          if (!sonarQube.waitForQualityGateWebhookToBeCalled()) {
+            currentBuild.result ='UNSTABLE'
+          }
         }
     }
 
