@@ -1,5 +1,5 @@
 #!groovy
-@Library('github.com/cloudogu/ces-build-lib@6730a61')
+@Library('github.com/cloudogu/ces-build-lib@3bf5579')
 import com.cloudogu.ces.cesbuildlib.*
 
 properties([
