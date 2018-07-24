@@ -11,11 +11,10 @@ properties([
 
 node {
 
+  Maven mvn = new MavenWrapper(this)
+  Git git = new Git(this)
+
   catchError {
-
-    Maven mvn = new MavenWrapper(this)
-    Git git = new Git(this)
-
 
     stage('Checkout') {
       checkout scm
