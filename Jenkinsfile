@@ -1,72 +1,103 @@
 #!groovy
-@Library('github.com/cloudogu/ces-build-lib@caa9632')
+@Library('github.com/cloudogu/ces-build-lib@b676f08')
 import com.cloudogu.ces.cesbuildlib.*
 
 properties([
-        // Don't run concurrent builds, because the ITs use the same port causing random failures on concurrent builds.
-        disableConcurrentBuilds()
+  // Keep only the most recent builds in order to preserve space
+  buildDiscarder(logRotator(numToKeepStr: '20')),
+  // Don't run concurrent builds for a branch, because they use the same workspace directory
+  disableConcurrentBuilds()
 ])
 
 node {
 
-    cesFqdn = findHostName()
-    cesUrl = "https://${cesFqdn}"
+  Maven mvn = new MavenWrapper(this)
+  Git git = new Git(this)
 
-    Maven mvn = new MavenWrapper(this)
+  catchError {
 
-    catchError {
-
-        stage('Checkout') {
-            checkout scm
-        }
-
-        stage('Build') {
-            mvn "-DskipTests clean package"
-
-            // archive artifact
-            archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
-        }
-
-        parallel(
-                test: {
-                    stage('Test') {
-                        String jacoco = "org.jacoco:jacoco-maven-plugin:0.7.7.201606060606"
-                        mvn "${jacoco}:prepare-agent test ${jacoco}:report"
-                    }
-                },
-                integrationTest: {
-                    stage('Integration Test') {
-                        String jacoco = "org.jacoco:jacoco-maven-plugin:0.7.7.201606060606";
-                        mvn "${jacoco}:prepare-agent-integration failsafe:integration-test ${jacoco}:report-integration"
-                    }
-                }
-        )
-
-        stage('SonarQube Analysis') {
-
-            String prArgs = ""
-            if (isPullRequest()) {
-                echo "Analysing SQ in PR mode"
-                prArgs = "-Dsonar.pullrequest.base=master" +
-                         "-Dsonar.pullrequest.branch=${env.BRANCH_NAME}" +
-                         "-Dsonar.pullrequest.key=${env.CHANGE_ID}" +
-                         "-Dsonar.pullrequest.provider=GitHub" +
-                         "-Dsonar.pullrequest.github.repository=new Git(this).gitHubRepositoryName"
-            }
-
-            withSonarQubeEnv('sonarcloud.io') {
-                mvn "${env.SONAR_MAVEN_GOAL} " +
-                        "-Dsonar.host.url=${env.SONAR_HOST_URL} " +
-                        "-Dsonar.login=${env.SONAR_AUTH_TOKEN} " +
-                        "${prArgs}"
-            }
-        }
+    stage('Checkout') {
+      checkout scm
+      git.clean('')
     }
 
-    // Archive Unit and integration test results, if any
-    junit allowEmptyResults: true, testResults: '**/target/failsafe-reports/TEST-*.xml,**/target/surefire-reports/TEST-*.xml'
+    initMaven(mvn)
+
+    stage('Build') {
+      mvn 'clean install -DskipTests'
+      archive '**/target/*.jar'
+    }
+
+    stage('Unit Test') {
+      mvn "test"
+    }
+
+    stage('Integration Test') {
+      mvn "verify -DskipUnitTests"
+    }
+
+    stage('Statical Code Analysis') {
+      def sonarQube = new SonarCloud(this, [sonarQubeEnv: 'sonarcloud.io'])
+
+      sonarQube.analyzeWith(mvn)
+
+      if (!sonarQube.waitForQualityGateWebhookToBeCalled()) {
+        currentBuild.result ='UNSTABLE'
+      }
+    }
+
+    stage('Deploy') {
+      if (preconditionsForDeploymentFulfilled()) {
+
+        mvn.useDeploymentRepository([id: 'ossrh', url: 'https://oss.sonatype.org/',
+                                     credentialsId: 'de.triology-mavenCentral-acccessToken', type: 'Nexus2'])
+
+        mvn.setSignatureCredentials('de.triology-mavenCentral-secretKey-asc-file',
+                                    'de.triology-mavenCentral-secretKey-Passphrase')
+
+        mvn.deployToNexusRepositoryWithStaging()
+      }
+    }
+  }
+
+  // Archive Unit and integration test results, if any
+  junit allowEmptyResults: true,
+    testResults: '**/target/surefire-reports/TEST-*.xml, **/target/failsafe-reports/*.xml'
+
+  // Find maven warnings and visualize in job
+  warnings consoleParsers: [[parserName: 'Maven']]
+
+  mailIfStatusChanged(git.commitAuthorEmail)
 }
 
-// Init global vars in order to avoid NPE
-String cesFqdn = ''
-String cesUrl = ''
+boolean preconditionsForDeploymentFulfilled() {
+  if (isBuildSuccessful() &&
+      !isPullRequest() &&
+      shouldBranchBeDeployed()) {
+    return true
+  } else {
+    echo "Skipping deployment because of branch or build result: currentResult=${currentBuild.currentResult}, " +
+      "result=${currentBuild.result}, branch=${env.BRANCH_NAME}."
+    return false
+  }
+}
+
+private boolean shouldBranchBeDeployed() {
+  return env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'develop'
+}
+
+private boolean isBuildSuccessful() {
+  currentBuild.currentResult == 'SUCCESS' &&
+    // Build result == SUCCESS seems not to set be during pipeline execution.
+    (currentBuild.result == null || currentBuild.result == 'SUCCESS')
+}
+
+void initMaven(Maven mvn) {
+
+  if ("master".equals(env.BRANCH_NAME)) {
+
+    echo "Building master branch"
+    mvn.additionalArgs = "-DperformRelease"
+    currentBuild.description = mvn.getVersion()
+  }
+}
