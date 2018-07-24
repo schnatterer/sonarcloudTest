@@ -37,7 +37,7 @@ node {
     }
 
     stage('Statical Code Analysis') {
-      def sonarQube = new SonarCloud(this, [sonarQubeEnv: 'sonarcloud.io'])
+      def sonarQube = new SonarCloud(this, [sonarQubeEnv: 'sonarcloud.io', sonarOrganization: 'schnatterer-github'])
 
       sonarQube.analyzeWith(mvn)
 
